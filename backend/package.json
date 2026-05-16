@@ -1,0 +1,27 @@
+{
+  "name": "fn1-social-backend",
+  "version": "0.1.0",
+  "description": "Team Workstation Social Operations Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test:layer-a-contract": "node scripts/layer-a-contract-test.js",
+    "ci:layer-a-contract": "node scripts/layer-a-contract-test.js"
+  },
+  "keywords": [
+    "social",
+    "oauth",
+    "x-api",
+    "team-workstation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "openai": "^6.37.0",
+    "uuid": "^9.0.0"
+  }
+}

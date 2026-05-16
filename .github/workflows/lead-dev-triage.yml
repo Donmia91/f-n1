@@ -1,0 +1,75 @@
+name: Lead Dev — Auto-Triage Failures
+
+on:
+  # Fires every time a CI check completes
+  check_run:
+    types: [completed]
+
+  # Manual trigger: paste a check_run_id to triage any past failure
+  workflow_dispatch:
+    inputs:
+      check_run_id:
+        description: 'Check run ID to triage (from GitHub URL or API)'
+        required: true
+        type: string
+      base_sha:
+        description: 'Commit SHA the check ran against (leave blank for HEAD)'
+        required: false
+        type: string
+
+permissions:
+  contents: write       # push fix branch
+  pull-requests: write  # open draft PR
+  checks: read          # read check run logs
+
+jobs:
+  triage:
+    # Skip if the check passed or if this is already a triage PR branch
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event.check_run.conclusion == 'failure' &&
+       !startsWith(github.event.check_run.head_branch, 'lead-dev/fix-'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Fetch the commit the failing check ran against
+          ref: ${{ github.event.check_run.head_sha || github.event.inputs.base_sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Lead Dev triage
+        id: triage
+        env:
+          # GitHub token with repo + PR write access
+          GH_TOKEN:          ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          # LLM — set ANTHROPIC_API_KEY or OPENAI_API_KEY in repo secrets
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY:    ${{ secrets.OPENAI_API_KEY }}
+          # Context injected from the triggering event (or manual inputs)
+          REPO_OWNER:        ${{ github.repository_owner }}
+          REPO_NAME:         ${{ github.event.repository.name || github.event.inputs.repo_name }}
+          CHECK_RUN_ID:      ${{ github.event.check_run.id || github.event.inputs.check_run_id }}
+          HEAD_SHA:          ${{ github.event.check_run.head_sha || github.event.inputs.base_sha || github.sha }}
+          HEAD_BRANCH:       ${{ github.event.check_run.head_branch || github.ref_name }}
+          CHECK_NAME:        ${{ github.event.check_run.name || 'manual' }}
+        run: node .github/scripts/triage.js
+
+      - name: Report — no fix generated
+        if: steps.triage.outputs.pr_url == ''
+        run: |
+          echo "Lead Dev triage complete — no automated fix was generated."
+          echo "See triage output above for root-cause analysis."
+
+      - name: Report — PR opened
+        if: steps.triage.outputs.pr_url != ''
+        run: |
+          echo "✓ Lead Dev opened a draft fix PR: ${{ steps.triage.outputs.pr_url }}"
